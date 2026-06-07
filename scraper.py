@@ -15,8 +15,9 @@ import logging
 # ============================================================
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8975462967:AAHTXD_yOZXpDfFDK9Elh_byI0ZIpEailwk")
 TELEGRAM_CHAT_IDS  = [
-    os.environ.get("TELEGRAM_CHAT_ID", "767989979"),   # Chat riêng
-    os.environ.get("TELEGRAM_GROUP_ID", "-5151512262"), # Group sale
+    os.environ.get("TELEGRAM_CHAT_ID", "767989979"),    # Chat riêng
+    os.environ.get("TELEGRAM_GROUP_ID", "-5151512262"), # Group sale 1
+    "-5117296331",                                       # Group sale 2
 ]
 
 # Từ khóa tìm kiếm trên muasamcong (đấu thầu chính thức)
