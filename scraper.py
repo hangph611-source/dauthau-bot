@@ -7,7 +7,7 @@ Nguồn 2: Website bệnh viện tỉnh từ Lâm Đồng → Cà Mau + TP.HCM
 import requests
 from bs4 import BeautifulSoup
 import json, os, time, hashlib
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import logging
 
 # ============================================================
@@ -257,7 +257,8 @@ def scrape_hospital(hospital: dict) -> list[dict]:
 # ─────────────────────────────────────────────
 
 def run_once():
-    now = datetime.now().strftime("%d/%m/%Y %H:%M")
+    VN_TZ = timezone(timedelta(hours=7))
+    now = datetime.now(VN_TZ).strftime("%d/%m/%Y %H:%M")
     log.info("═" * 60)
     log.info(f"Bắt đầu quét lúc {now}")
     send_telegram(
