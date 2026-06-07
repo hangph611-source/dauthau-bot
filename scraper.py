@@ -13,7 +13,7 @@ import logging
 # ============================================================
 # CẤU HÌNH
 # ============================================================
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8975462967:AAHTXDyOZXpDfFDK9Elh_byI0ZIpEailwk")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8975462967:AAHTXD_yOZXpDfFDK9Elh_byI0ZIpEailwk")
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "767989979")
 
 KEYWORDS = [
