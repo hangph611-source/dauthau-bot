@@ -248,6 +248,11 @@ def _extract_text(tag, class_hints: list) -> str:
 def run_once():
     log.info("═" * 50)
     log.info(f"Bắt đầu quét lúc {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+    send_telegram(
+        f"🤖 <b>Bot đang chạy...</b>\n"
+        f"🕐 {datetime.now().strftime('%d/%m/%Y %H:%M')}\n"
+        f"🔍 Đang quét {len(KEYWORDS)} từ khóa trên 3 trang đấu thầu..."
+    )
     seen       = load_seen()
     new_count  = 0
 
@@ -278,6 +283,11 @@ def run_once():
 
     save_seen(seen)
     log.info(f"Hoàn thành: {new_count} gói thầu mới được gửi.")
+    send_telegram(
+        f"✅ <b>Quét xong!</b>\n"
+        f"📊 Tìm thấy <b>{new_count}</b> gói thầu mới\n"
+        f"{'🏥 Kiểm tra tin nhắn phía trên!' if new_count > 0 else '😴 Chưa có gói thầu mới, sẽ quét lại sau.'}"
+    )
 
 
 if __name__ == "__main__":
