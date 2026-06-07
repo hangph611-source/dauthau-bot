@@ -19,19 +19,41 @@ TELEGRAM_CHAT_IDS  = [
     os.environ.get("TELEGRAM_GROUP_ID", "-5151512262"), # Group sale
 ]
 
+# Từ khóa tìm kiếm trên muasamcong (đấu thầu chính thức)
 KEYWORDS = [
-    "thiết bị y tế", "vật lý trị liệu", "phục hồi chức năng",
-    "thận nhân tạo", "siêu âm điều trị", "máy điện trị liệu",
-    "thiết bị phcn", "chào giá thiết bị", "báo giá thiết bị y tế",
-    "mua sắm thiết bị y tế", "vật tư y tế", "trang thiết bị y tế",
+    "trang thiết bị y tế",
+    "thiết bị y tế",
+    "vật tư y tế",
+    "máy móc thiết bị y tế",
+    "thiết bị vật lý trị liệu",
+    "thiết bị phục hồi chức năng",
+    "thiết bị phcn",
+    "máy thận nhân tạo",
+    "máy siêu âm điều trị",
+    "máy điện trị liệu",
+    "máy kéo giãn cột sống",
+    "máy sóng ngắn",
+    "máy laser trị liệu",
+    "nén ép trị liệu",
 ]
 
-QUOTE_KEYWORDS = [
+# Từ khóa lọc bài trên website bệnh viện (chào giá/báo giá)
+# Bài phải chứa ít nhất 1 từ nhóm A VÀ 1 từ nhóm B
+QUOTE_KEYWORDS_A = [
     "chào giá", "báo giá", "yêu cầu báo giá", "mời chào giá",
-    "chỉ định thầu", "mua sắm", "thiết bị y tế", "vật tư y tế",
-    "vật lý trị liệu", "phục hồi chức năng", "thận nhân tạo",
-    "trang thiết bị", "máy móc", "thiết bị phcn",
+    "chỉ định thầu", "mời thầu", "thông báo mời thầu",
+    "kết quả chỉ định thầu", "kế hoạch lựa chọn nhà thầu",
 ]
+
+QUOTE_KEYWORDS_B = [
+    "trang thiết bị y tế", "thiết bị y tế", "vật tư y tế",
+    "thiết bị vật lý trị liệu", "phục hồi chức năng", "thiết bị phcn",
+    "thận nhân tạo", "siêu âm điều trị", "điện trị liệu",
+    "máy móc y tế", "thiết bị điều trị",
+]
+
+# Dùng chung cho filter cuối
+QUOTE_KEYWORDS = QUOTE_KEYWORDS_A + QUOTE_KEYWORDS_B
 
 # ─── DANH SÁCH BỆNH VIỆN (Lâm Đồng → Cà Mau + TP.HCM) ───────
 HOSPITAL_SITES = [
@@ -238,7 +260,9 @@ def scrape_hospital(hospital: dict) -> list[dict]:
             if len(title) < 15 or href in seen_hrefs:
                 continue
             title_lower = title.lower()
-            if not any(kw in title_lower for kw in QUOTE_KEYWORDS):
+            has_action = any(kw in title_lower for kw in QUOTE_KEYWORDS_A)
+            has_device = any(kw in title_lower for kw in QUOTE_KEYWORDS_B)
+            if not (has_action and has_device):
                 continue
             seen_hrefs.add(href)
             if href and not href.startswith("http"):
@@ -301,7 +325,9 @@ def run_once():
         if tid in seen:
             continue
         title_lower = item["title"].lower()
-        if not any(kw in title_lower for kw in KEYWORDS + QUOTE_KEYWORDS):
+        # Lọc: phải liên quan đến thiết bị y tế thực sự
+        has_device_kw = any(kw in title_lower for kw in KEYWORDS + QUOTE_KEYWORDS_B)
+        if not has_device_kw:
             continue
         if send_telegram(format_message(item)):
             seen.add(tid)
