@@ -190,40 +190,54 @@ def make_id(t: dict) -> str:
 # SCRAPER: muasamcong.gov.vn
 # ─────────────────────────────────────────────
 
-def scrape_muasamcong(keyword: str, method_id: str = "2", tender_type: str = "gói thầu") -> list[dict]:
+def scrape_muasamcong(keyword: str, tender_type: str = "gói thầu", selection_method: str = "") -> list[dict]:
+    """
+    Scrape hệ thống đấu thầu quốc gia MỚI (muasamcong.gov.vn - Bộ Tài chính)
+    selection_method:
+      "" = tất cả (đấu thầu rộng rãi)
+      "chao-hang-canh-tranh" = chào hàng cạnh tranh
+      "mua-sam-truc-tiep"   = mua sắm trực tiếp
+    """
     results = []
-    # method_id: 2=đang mời thầu, thêm selectionMethodId cho chào giá
+    base = "https://muasamcong.gov.vn"
+
+    # Thử các endpoint của hệ thống mới
     urls_to_try = [
-        (
-            f"https://muasamcong.mpi.gov.vn/web/guest/package"
-            f"?p_p_id=packagelistportlet_WAR_qlhsportlet"
-            f"&searchValue={requests.utils.quote(keyword)}"
-            f"&statusId={method_id}"
-        ),
+        f"{base}/tim-kiem-goi-thau?keyword={requests.utils.quote(keyword)}&trangThai=dang-mo-thau",
+        f"{base}/thong-bao-moi-thau?keyword={requests.utils.quote(keyword)}",
     ]
-    # Thêm url cho chào giá / mua sắm trực tiếp
-    if tender_type == "chào giá":
-        urls_to_try.append(
-            f"https://muasamcong.mpi.gov.vn/web/guest/package"
-            f"?p_p_id=packagelistportlet_WAR_qlhsportlet"
-            f"&searchValue={requests.utils.quote(keyword)}"
-            f"&statusId=2&selectionMethodId=4"
+    if selection_method:
+        urls_to_try.insert(0,
+            f"{base}/tim-kiem-goi-thau?keyword={requests.utils.quote(keyword)}"
+            f"&hinhThucLCNT={selection_method}&trangThai=dang-mo-thau"
         )
+
     try:
         for url in urls_to_try:
             r = requests.get(url, headers=HEADERS, timeout=20)
+            if r.status_code != 200:
+                continue
             soup = BeautifulSoup(r.text, "html.parser")
-            for row in soup.select("table.table tbody tr"):
-                cols = row.find_all("td")
-                if len(cols) < 4:
-                    continue
-                tag = cols[1].find("a")
+
+            # Thử nhiều selector
+            rows = (
+                soup.select("table tbody tr") or
+                soup.select(".package-item") or
+                soup.select(".tender-row") or
+                soup.select(".result-item")
+            )
+            for row in rows:
+                tag = row.find("a")
                 if not tag:
                     continue
                 title = tag.get_text(strip=True)
-                href  = tag.get("href", "")
+                if len(title) < 10:
+                    continue
+                href = tag.get("href", "")
                 if href and not href.startswith("http"):
-                    href = "https://muasamcong.mpi.gov.vn" + href
+                    href = base + href
+
+                cols = row.find_all("td")
                 results.append({
                     "title":    title,
                     "investor": cols[2].get_text(strip=True) if len(cols) > 2 else "N/A",
@@ -233,6 +247,8 @@ def scrape_muasamcong(keyword: str, method_id: str = "2", tender_type: str = "g�
                     "source":   "muasamcong.gov.vn",
                     "type":     tender_type,
                 })
+            if results:
+                break  # Dừng nếu đã có kết quả
     except Exception as e:
         log.warning(f"[muasamcong/{tender_type}] '{keyword}': {e}")
     return results
@@ -241,6 +257,169 @@ def scrape_muasamcong(keyword: str, method_id: str = "2", tender_type: str = "g�
 # ─────────────────────────────────────────────
 # SCRAPER: Website bệnh viện
 # ─────────────────────────────────────────────
+
+
+
+
+
+def scrape_muasamcong_rq(keyword: str) -> list[dict]:
+    """
+    Scrape yêu cầu báo giá (mã RQ) từ API chính thức muasamcong.mpi.gov.vn
+    API: POST /o/egp-portal-contractor-selection-v2/services/smart/search
+    Response: page.content[] với các field id, notifyNo, name, investorName, bidCloseDate
+    """
+    results = []
+    api_base = "https://muasamcong.mpi.gov.vn/o/egp-portal-contractor-selection-v2/services/smart/search"
+
+    # Lấy token từ trang chủ
+    token = ""
+    try:
+        page_url = (
+            "https://muasamcong.mpi.gov.vn/web/guest/contractor-selection"
+            "?p_p_id=egpportalcontractorselectionv2_WAR_egpportalcontractorselectionv2"
+            "&p_p_lifecycle=0&p_p_state=normal&p_p_mode=view"
+            "&_egpportalcontractorselectionv2_WAR_egpportalcontractorselectionv2_render=index"
+            "&indexSelect=null"
+        )
+        r0 = requests.get(page_url, headers=HEADERS, timeout=20)
+        # Token nằm trong JS của trang
+        import re as _re
+        m = _re.search(r"[A-Za-z0-9_-]{200,}", r0.text)
+        if m:
+            token = m.group(1)
+    except Exception as e:
+        log.warning(f"[RQ-token] {e}")
+
+    payload = [{
+        "pageSize": 50,
+        "pageNumber": "0",
+        "query": [{
+            "index": "es-contractor-selection",
+            "keyWord": keyword,
+            "matchType": "all-1",
+            "matchFields": ["goods"],
+            "filters": [
+                {"fieldName": "type", "searchType": "in", "fieldValues": ["es-ycbg"]},
+                {"fieldName": "facet_is_closed_date", "searchType": "in", "fieldValues": ["open"]}
+            ]
+        }]
+    }]
+
+    try:
+        url = api_base + (f"?token={token}" if token else "")
+        r = requests.post(
+            url,
+            json=payload,
+            headers={**HEADERS, "Content-Type": "application/json"},
+            timeout=25
+        )
+        data = r.json()
+
+        # Parse theo đúng cấu trúc response: data.page.content[]
+        items = []
+        if isinstance(data, dict):
+            items = data.get("page", {}).get("content", [])
+        elif isinstance(data, list) and data:
+            items = data[0].get("page", {}).get("content", [])
+
+        for item in items:
+            doc_id    = item.get("id", "")
+            notify_no = item.get("notifyNo", "")
+            title     = item.get("name") or item.get("pname") or ""
+            investor  = item.get("investorName", "N/A")
+            deadline  = item.get("bidCloseDate", "N/A")
+            # Format deadline
+            if deadline and "T" in str(deadline):
+                try:
+                    from datetime import datetime
+                    deadline = datetime.fromisoformat(deadline).strftime("%d/%m/%Y %H:%M")
+                except:
+                    pass
+
+            if not title:
+                continue
+
+            detail_url = (
+                "https://muasamcong.mpi.gov.vn/web/guest/contractor-selection"
+                f"?p_p_id=egpportalcontractorselectionv2_WAR_egpportalcontractorselectionv2"
+                f"&_egpportalcontractorselectionv2_WAR_egpportalcontractorselectionv2_render=detail-v2"
+                f"&type=es-ycbg&id={doc_id}&notifyNo={notify_no}"
+                f"&stepCode=request-quote-step-1"
+            )
+
+            results.append({
+                "title":    f"[{notify_no}] {title}",
+                "investor": investor,
+                "value":    "N/A",
+                "deadline": str(deadline),
+                "url":      detail_url,
+                "source":   "muasamcong.mpi.gov.vn",
+                "type":     "chào giá (RQ)",
+            })
+    except Exception as e:
+        log.warning(f"[muasamcong-RQ] '{keyword}': {e}")
+    return results
+
+
+def scrape_dauthau_asia_yte(keyword: str) -> list[dict]:
+    """
+    Scrape dauthau.asia — tổng hợp cả mã RQ (yêu cầu báo giá) + gói thầu TBYT
+    Đây là nguồn tốt nhất cho mã RQ vì hiển thị công khai không cần đăng nhập
+    """
+    results = []
+    urls = [
+        # Tìm kiếm theo từ khóa + lọc lĩnh vực y tế
+        f"https://dauthau.asia/thong-bao-moi-thau?keyword={requests.utils.quote(keyword)}&industry=y-te",
+        f"https://dauthau.asia/yeu-cau-bao-gia?keyword={requests.utils.quote(keyword)}",
+        # Trang chuyên thiết bị y tế
+        f"https://dauthau.asia/tenderlistbyindustrytype/medical-and-sports-equipment-and-supplies/?keyword={requests.utils.quote(keyword)}",
+    ]
+    try:
+        for url in urls:
+            r = requests.get(url, headers=HEADERS, timeout=20)
+            if r.status_code != 200:
+                continue
+            soup = BeautifulSoup(r.text, "html.parser")
+
+            # Tìm các item kết quả
+            items = (
+                soup.select(".tender-item, .bid-item, .package-item, .result-item") or
+                soup.select("table tbody tr") or
+                soup.select("ul.list-tender li, ul.list-bid li")
+            )
+            for item in items:
+                tag = item.find("a")
+                if not tag:
+                    continue
+                title = tag.get_text(strip=True)
+                if len(title) < 10:
+                    continue
+                href = tag.get("href", "")
+                if href and not href.startswith("http"):
+                    href = "https://dauthau.asia" + href
+
+                # Phân loại RQ hay gói thầu thường
+                is_rq = "RQ" in title or "báo giá" in title.lower() or "yêu cầu" in title.lower()
+                tender_type = "chào giá (RQ)" if is_rq else "gói thầu"
+
+                cols = item.find_all("td")
+                investor = cols[1].get_text(strip=True) if len(cols) > 1 else ""
+                deadline = cols[3].get_text(strip=True) if len(cols) > 3 else ""
+
+                results.append({
+                    "title":    title,
+                    "investor": investor or "N/A",
+                    "value":    "N/A",
+                    "deadline": deadline or "N/A",
+                    "url":      href,
+                    "source":   "dauthau.asia",
+                    "type":     tender_type,
+                })
+            if results:
+                break
+    except Exception as e:
+        log.warning(f"[dauthau.asia-yte] '{keyword}': {e}")
+    return results
 
 def scrape_hospital(hospital: dict) -> list[dict]:
     results = []
@@ -302,17 +481,35 @@ def run_once():
     new_count = 0
     all_items = []
 
-    # 1. muasamcong — đấu thầu thông thường
-    log.info("📋 Quét muasamcong (đấu thầu)...")
+    # 1. muasamcong — đấu thầu rộng rãi
+    log.info("📋 Quét muasamcong (đấu thầu rộng rãi)...")
     for kw in KEYWORDS:
         all_items += scrape_muasamcong(kw, tender_type="gói thầu")
         time.sleep(0.8)
 
-    # 2. muasamcong — chào giá / mua sắm trực tiếp
-    log.info("💬 Quét muasamcong (chào giá)...")
+    # 2. muasamcong — chào hàng cạnh tranh
+    log.info("💬 Quét muasamcong (chào hàng cạnh tranh)...")
     for kw in KEYWORDS:
-        all_items += scrape_muasamcong(kw, tender_type="chào giá")
+        all_items += scrape_muasamcong(kw, tender_type="chào giá", selection_method="chao-hang-canh-tranh")
         time.sleep(0.8)
+
+    # 3. muasamcong — mua sắm trực tiếp
+    log.info("🛒 Quét muasamcong (mua sắm trực tiếp)...")
+    for kw in KEYWORDS:
+        all_items += scrape_muasamcong(kw, tender_type="chào giá", selection_method="mua-sam-truc-tiep")
+        time.sleep(0.8)
+
+    # 4. muasamcong — Yêu cầu báo giá (mã RQ)
+    log.info("📨 Quét muasamcong (Yêu cầu báo giá RQ)...")
+    for kw in KEYWORDS:
+        all_items += scrape_muasamcong_rq(kw)
+        time.sleep(1)
+
+    # 4b. dauthau.asia — tổng hợp mã RQ + gói thầu TBYT
+    log.info("🔎 Quét dauthau.asia (RQ + TBYT)...")
+    for kw in KEYWORDS:
+        all_items += scrape_dauthau_asia_yte(kw)
+        time.sleep(1)
 
     # 3. Website từng bệnh viện
     for hospital in HOSPITAL_SITES:
