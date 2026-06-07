@@ -1,0 +1,39 @@
+name: 🏥 Đấu Thầu Y Tế Bot
+
+on:
+  schedule:
+    # Chạy lúc 7h, 11h, 15h, 20h giờ VN (UTC+7) mỗi ngày
+    - cron: '0 0,4,8,13 * * *'
+  workflow_dispatch:   # Cho phép chạy thủ công bằng 1 click
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # Cần để commit file seen_tenders.json
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Cài thư viện
+        run: pip install -r requirements.txt
+
+      - name: 🔍 Chạy scraper
+        run: python scraper.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: 💾 Lưu danh sách đã thông báo
+        run: |
+          git config user.name  "DauThau Bot"
+          git config user.email "bot@dauthau.local"
+          git add seen_tenders.json || true
+          git diff --staged --quiet || git commit -m "Update seen tenders [skip ci]"
+          git push || true
