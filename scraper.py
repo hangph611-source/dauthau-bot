@@ -14,7 +14,10 @@ import logging
 # CẤU HÌNH
 # ============================================================
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8975462967:AAHTXD_yOZXpDfFDK9Elh_byI0ZIpEailwk")
-TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "767989979")
+TELEGRAM_CHAT_IDS  = [
+    os.environ.get("TELEGRAM_CHAT_ID", "767989979"),   # Chat riêng
+    os.environ.get("TELEGRAM_GROUP_ID", "-5151512262"), # Group sale
+]
 
 KEYWORDS = [
     "thiết bị y tế", "vật lý trị liệu", "phục hồi chức năng",
@@ -103,19 +106,21 @@ HEADERS = {
 # ─────────────────────────────────────────────
 
 def send_telegram(message: str) -> bool:
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    try:
-        r = requests.post(url, json={
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": message,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": False,
-        }, timeout=15)
-        r.raise_for_status()
-        return True
-    except Exception as e:
-        log.error(f"Telegram error: {e}")
-        return False
+    success = False
+    for chat_id in TELEGRAM_CHAT_IDS:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        try:
+            r = requests.post(url, json={
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": False,
+            }, timeout=15)
+            r.raise_for_status()
+            success = True
+        except Exception as e:
+            log.error(f"Telegram error [{chat_id}]: {e}")
+    return success
 
 
 def format_message(tender: dict) -> str:
