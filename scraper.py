@@ -57,6 +57,42 @@ QUOTE_KEYWORDS_B = [
 # Dùng chung cho filter cuối
 QUOTE_KEYWORDS = QUOTE_KEYWORDS_A + QUOTE_KEYWORDS_B
 
+# Chỉ lấy gói thầu thuộc các tỉnh từ Lâm Đồng -> Cà Mau + TP.HCM
+ALLOWED_PROVINCES = [
+    # Tây Nguyên
+    "lam dong", "lâm đồng",
+    "dak lak", "dak lac", "đắk lắk", "đắc lắc", "đắk lắc",
+    "dak nong", "đắk nông", "đắc nông",
+    # Đông Nam Bộ
+    "binh phuoc", "bình phước",
+    "tay ninh", "tây ninh",
+    "binh duong", "bình dương",
+    "dong nai", "đồng nai",
+    "ba ria", "bà rịa", "vung tau", "vũng tàu", "br-vt", "brvt",
+    "ho chi minh", "hồ chí minh", "hcm", "tp.hcm", "tp hcm", "sai gon", "sài gòn",
+    # ĐBSCL
+    "long an",
+    "tien giang", "tiền giang",
+    "ben tre", "bến tre",
+    "vinh long", "vĩnh long",
+    "tra vinh", "trà vinh",
+    "can tho", "cần thơ",
+    "hau giang", "hậu giang",
+    "soc trang", "sóc trăng",
+    "bac lieu", "bạc liêu",
+    "ca mau", "cà mau",
+    "dong thap", "đồng tháp",
+    "an giang",
+    "kien giang", "kiên giang",
+]
+
+def is_allowed_province(text: str) -> bool:
+    """Kiểm tra gói thầu có thuộc vùng Lâm Đồng - Cà Mau + TP.HCM không"""
+    text_lower = text.lower()
+    return any(p in text_lower for p in ALLOWED_PROVINCES)
+
+
+
 #  DANH SÁCH BỆNH VIỆN (Lâm Đồng  Cà Mau + TP.HCM) 
 HOSPITAL_SITES = [
     #  TÂY NGUYÊN 
@@ -540,6 +576,15 @@ def run_once():
         # Lọc: phải liên quan đến thiết bị y tế thực sự
         has_device_kw = any(kw in title_lower for kw in KEYWORDS + QUOTE_KEYWORDS_B)
         if not has_device_kw:
+            continue
+        # Lọc địa lý: chỉ lấy tỉnh từ Lâm Đồng -> Cà Mau + TP.HCM
+        # Kiểm tra trong title + investor
+        full_text = title_lower + " " + item.get("investor", "").lower() + " " + item.get("source", "").lower()
+        # Bệnh viện trong danh sách HOSPITAL_SITES luôn được chấp nhận
+        if item.get("type") == "chao gia" or item.get("source","") in [h["name"] for h in HOSPITAL_SITES]:
+            pass  # Đã lọc đúng vùng từ danh sách bệnh viện
+        elif not is_allowed_province(full_text):
+            log.info(f"  [BO QUA - ngoai vung] {item['title'][:50]}")
             continue
         if send_telegram(format_message(item)):
             seen.add(tid)
