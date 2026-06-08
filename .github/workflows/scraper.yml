@@ -2,7 +2,7 @@ name: 🏥 Đấu Thầu Y Tế Bot
 
 on:
   schedule:
-    # Chạy lúc 7h, 11h, 15h, 20h giờ VN (UTC+7) mỗi ngày
+    # Chạy lúc 8h, 12h, 14h, 17h, 20h giờ VN (UTC+7) mỗi ngày
     - cron: '0 1,4,7,10,13 * * *'
   workflow_dispatch:   # Cho phép chạy thủ công bằng 1 click
 
