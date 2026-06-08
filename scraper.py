@@ -9,11 +9,12 @@ from bs4 import BeautifulSoup
 import json, os, time, hashlib
 from datetime import datetime, timezone, timedelta
 import logging
+import re
 
 # ============================================================
 # CẤU HÌNH
 # ============================================================
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8975462967:AAHTXD_yOZXpDfFDK9Elh_byI0ZIpEailwk")
+TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_IDS  = [
     os.environ.get("TELEGRAM_CHAT_ID", "767989979"),    # Chat riêng
     os.environ.get("TELEGRAM_GROUP_ID", "-5151512262"), # Group sale 1
@@ -179,8 +180,12 @@ def load_seen() -> set:
         return set()
 
 def save_seen(seen: set):
+    # Giới hạn 10000 ID gần nhất tránh file phình to
+    items = list(seen)
+    if len(items) > 10000:
+        items = items[-10000:]
     with open(SEEN_FILE, "w", encoding="utf-8") as f:
-        json.dump(list(seen), f, ensure_ascii=False)
+        json.dump(items, f, ensure_ascii=False)
 
 def make_id(t: dict) -> str:
     return hashlib.md5(f"{t.get('title','')}{t.get('url','')}".encode()).hexdigest()
@@ -283,10 +288,9 @@ def scrape_muasamcong_rq(keyword: str) -> list[dict]:
         )
         r0 = requests.get(page_url, headers=HEADERS, timeout=20)
         # Token nằm trong JS của trang
-        import re as _re
-        m = _re.search(r"[A-Za-z0-9_-]{200,}", r0.text)
+        m = re.search(r"[A-Za-z0-9_-]{200,}", r0.text)
         if m:
-            token = m.group(1)
+            token = m.group(0)
     except Exception as e:
         log.warning(f"[RQ-token] {e}")
 
@@ -331,8 +335,7 @@ def scrape_muasamcong_rq(keyword: str) -> list[dict]:
             # Format deadline
             if deadline and "T" in str(deadline):
                 try:
-                    from datetime import datetime
-                    deadline = datetime.fromisoformat(deadline).strftime("%d/%m/%Y %H:%M")
+                                deadline = datetime.fromisoformat(deadline).strftime("%d/%m/%Y %H:%M")
                 except:
                     pass
 
@@ -516,6 +519,17 @@ def run_once():
         log.info(f" Quét {hospital['name']}...")
         all_items += scrape_hospital(hospital)
         time.sleep(1.5)
+
+    # Dedup all_items theo URL trước khi xử lý
+    seen_urls = set()
+    deduped = []
+    for item in all_items:
+        url = item.get("url", "")
+        if url and url not in seen_urls:
+            seen_urls.add(url)
+            deduped.append(item)
+    all_items = deduped
+    log.info(f"Tong: {len(all_items)} items sau dedup")
 
     # Gửi cái mới
     for item in all_items:
