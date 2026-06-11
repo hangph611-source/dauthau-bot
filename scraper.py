@@ -103,13 +103,20 @@ class LegacySSLAdapter(HTTPAdapter):
     def init_poolmanager(self, *args, **kwargs):
         ctx = create_urllib3_context()
         try:
+            # Fix UNSAFE_LEGACY_RENEGOTIATION
             ctx.options |= getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)
+            # Fix DH_KEY_TOO_SMALL
+            ctx.set_ciphers("DEFAULT@SECLEVEL=1")
         except Exception:
             pass
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         kwargs["ssl_context"] = ctx
         super().init_poolmanager(*args, **kwargs)
+    
+    def send(self, *args, **kwargs):
+        kwargs["verify"] = False
+        return super().send(*args, **kwargs)
 
 def make_session() -> requests.Session:
     s = requests.Session()
