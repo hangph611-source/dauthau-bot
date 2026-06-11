@@ -10,6 +10,10 @@ import json, os, time, hashlib
 from datetime import datetime, timezone, timedelta
 import logging
 import re
+import ssl
+import urllib3
+from requests.adapters import HTTPAdapter
+from urllib3.util.ssl_ import create_urllib3_context
 
 # ============================================================
 # CẤU HÌNH
@@ -94,6 +98,28 @@ def is_allowed_province(text: str) -> bool:
 
 
 #  DANH SÁCH BỆNH VIỆN (Lâm Đồng  Cà Mau + TP.HCM) 
+
+class LegacySSLAdapter(HTTPAdapter):
+    def init_poolmanager(self, *args, **kwargs):
+        ctx = create_urllib3_context()
+        try:
+            ctx.options |= getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)
+        except Exception:
+            pass
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        kwargs["ssl_context"] = ctx
+        super().init_poolmanager(*args, **kwargs)
+
+def make_session() -> requests.Session:
+    s = requests.Session()
+    s.mount("https://", LegacySSLAdapter())
+    s.mount("http://", LegacySSLAdapter())
+    s.headers.update(HEADERS)
+    return s
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 HOSPITAL_SITES = [
     #  TÂY NGUYÊN 
     {"name": "BV ĐK tỉnh Lâm Đồng",        "url": "https://bvdakhoalamdong.vn/thong-bao",             "base": "https://bvdakhoalamdong.vn"},
@@ -254,8 +280,9 @@ def scrape_muasamcong(keyword: str, tender_type: str = "gói thầu", selection_
         )
 
     try:
+        session = make_session()
         for url in urls_to_try:
-            r = requests.get(url, headers=HEADERS, timeout=20)
+            r = session.get(url, timeout=20, verify=False)
             if r.status_code != 200:
                 continue
             soup = BeautifulSoup(r.text, "html.parser")
@@ -322,7 +349,8 @@ def scrape_muasamcong_rq(keyword: str) -> list[dict]:
             "&_egpportalcontractorselectionv2_WAR_egpportalcontractorselectionv2_render=index"
             "&indexSelect=null"
         )
-        r0 = requests.get(page_url, headers=HEADERS, timeout=20)
+        session = make_session()
+        r0 = session.get(page_url, timeout=20, verify=False)
         # Token nằm trong JS của trang
         m = re.search(r"[A-Za-z0-9_-]{200,}", r0.text)
         if m:
@@ -347,11 +375,12 @@ def scrape_muasamcong_rq(keyword: str) -> list[dict]:
 
     try:
         url = api_base + (f"?token={token}" if token else "")
-        r = requests.post(
+        r = make_session().post(
             url,
             json=payload,
-            headers={**HEADERS, "Content-Type": "application/json"},
-            timeout=25
+            headers={"Content-Type": "application/json"},
+            timeout=25,
+            verify=False
         )
         data = r.json()
 
